@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, User, Mail, Lightbulb, History, Eye, Shield, Plus, Trash2, Upload, FileText } from 'lucide-react';
+import { Search, User, Mail, Lightbulb, History, Eye, Shield, Plus, Trash2, Upload, FileText, Loader2 } from 'lucide-react';
 import MainLayout from './components/layout/MainLayout';
 import SearchBox from './components/search/SearchBox';
 import ResultsDisplay from './components/results/ResultsDisplay';
@@ -10,12 +10,15 @@ import { db, storage, handleFirestoreError, OperationType } from './firebase';
 import { collection, addDoc, serverTimestamp, query, where, orderBy, onSnapshot, deleteDoc, doc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { Button } from '@/components/ui/button';
+import { searchUsername, searchEmail, searchSingleUsernameSite } from './services/osintService';
+import sitesData from './data/sites.json';
 
 interface ResultItem {
   id: string;
   site: string;
-  status: 'found' | 'not_found';
+  status: 'found' | 'not_found' | 'uncertain';
   url?: string;
+  details?: string;
 }
 
 interface HistoryItem {
@@ -41,6 +44,9 @@ function AppContent() {
   const [loadingEmail, setLoadingEmail] = useState(false);
   const [currentUsername, setCurrentUsername] = useState('');
   const [currentEmail, setCurrentEmail] = useState('');
+  
+  const [searchProgress, setSearchProgress] = useState(0);
+  const [currentCheckingSite, setCurrentCheckingSite] = useState('');
   
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
@@ -144,42 +150,45 @@ function AppContent() {
     }
   };
 
-  const handleUsernameSearch = (username: string) => {
+  const handleUsernameSearch = async (username: string) => {
     setLoadingUsername(true);
     setCurrentUsername(username);
     setEmailResults([]);
+    setUsernameResults([]);
+    setSearchProgress(0);
     
-    setTimeout(() => {
-      const mockResults: ResultItem[] = [
-        { id: '1', site: 'Instagram', status: 'found', url: `https://instagram.com/${username}` },
-        { id: '2', site: 'Twitter / X', status: 'found', url: `https://twitter.com/${username}` },
-        { id: '3', site: 'GitHub', status: 'not_found' },
-        { id: '4', site: 'LinkedIn', status: 'found', url: '#' },
-        { id: '5', site: 'TikTok', status: 'not_found' },
-        { id: '6', site: 'Pinterest', status: 'found', url: '#' },
-      ];
-      setUsernameResults(mockResults);
-      setLoadingUsername(false);
-      saveToHistory(username, 'username', mockResults.filter(r => r.status === 'found').length);
-    }, 1500);
+    const allResults: ResultItem[] = [];
+    const totalSites = sitesData.length;
+    
+    // Process in small parallel chunks for speed but with progress tracking
+    const chunkSize = 3;
+    for (let i = 0; i < totalSites; i += chunkSize) {
+      const chunk = sitesData.slice(i, i + chunkSize);
+      setCurrentCheckingSite(chunk.map(s => s.name).join(', '));
+      
+      const chunkPromises = chunk.map(site => searchSingleUsernameSite(username, site));
+      const chunkResults = await Promise.all(chunkPromises);
+      
+      allResults.push(...chunkResults);
+      setUsernameResults([...allResults]); // Update UI incrementally
+      setSearchProgress(Math.round(((i + chunk.length) / totalSites) * 100));
+    }
+
+    setLoadingUsername(false);
+    setCurrentCheckingSite('');
+    saveToHistory(username, 'username', allResults.filter(r => r.status === 'found').length);
   };
 
-  const handleEmailSearch = (email: string) => {
+  const handleEmailSearch = async (email: string) => {
     setLoadingEmail(true);
     setCurrentEmail(email);
     setUsernameResults([]);
+    setEmailResults([]);
     
-    setTimeout(() => {
-      const mockResults: ResultItem[] = [
-        { id: 'e1', site: 'Google Account', status: 'found' },
-        { id: 'e2', site: 'Facebook', status: 'found' },
-        { id: 'e3', site: 'Adobe Data Breach', status: 'not_found' },
-        { id: 'e4', site: 'HaveIBeenPwned', status: 'found' },
-      ];
-      setEmailResults(mockResults);
-      setLoadingEmail(false);
-      saveToHistory(email, 'email', mockResults.filter(r => r.status === 'found').length);
-    }, 1500);
+    const results = await searchEmail(email);
+    setEmailResults(results);
+    setLoadingEmail(false);
+    saveToHistory(email, 'email', results.filter(r => r.status === 'found').length);
   };
 
   return (
@@ -234,10 +243,10 @@ function AppContent() {
 
                 <div className="bg-[#121212]/50 backdrop-blur-2xl p-8 rounded-md border border-[#311432] shadow-2xl">
                   <TabsContent value="username" className="mt-0 outline-none">
-                    <SearchBox type="username" placeholder="Ex: joaosilva_99" onSearch={handleUsernameSearch} />
+                    <SearchBox type="username" placeholder="Ex: joaosilva_99" onSearch={handleUsernameSearch} loading={loadingUsername} />
                   </TabsContent>
                   <TabsContent value="email" className="mt-0 outline-none">
-                    <SearchBox type="email" placeholder="Ex: contato@exemplo.com" onSearch={handleEmailSearch} />
+                    <SearchBox type="email" placeholder="Ex: contato@exemplo.com" onSearch={handleEmailSearch} loading={loadingEmail} />
                   </TabsContent>
                 </div>
               </Tabs>
@@ -339,6 +348,36 @@ function AppContent() {
         </div>
 
         <div className="mt-16 space-y-12 pb-20">
+          {loadingUsername && (
+            <div className="bg-white rounded-[2.5rem] p-8 shadow-2xl space-y-6 border border-purple-100">
+              <div className="flex justify-between items-end">
+                <div className="space-y-1">
+                  <h4 className="text-[#311432] font-bold text-lg flex items-center gap-2">
+                    <Loader2 className="animate-spin text-[#602080]" size={20} />
+                    Varredura em Progresso...
+                  </h4>
+                  <p className="text-xs text-gray-400 font-medium">
+                    Procurando em: <span className="text-[#602080]">{currentCheckingSite}</span>
+                  </p>
+                </div>
+                <span className="text-2xl font-black text-[#602080]">{searchProgress}%</span>
+              </div>
+              
+              <div className="w-full h-4 bg-gray-100 rounded-full overflow-hidden border border-gray-50">
+                <div 
+                  className="h-full bg-gradient-to-r from-[#602080] to-[#7a29a3] transition-all duration-500 ease-out shadow-[0_0_15px_rgba(96,32,128,0.3)]"
+                  style={{ width: `${searchProgress}%` }}
+                ></div>
+              </div>
+              
+              <div className="flex justify-between text-[10px] font-bold text-gray-300 uppercase tracking-widest">
+                <span>Início</span>
+                <span>{usernameResults.filter(r => r.status === 'found').length} Perfis Encontrados</span>
+                <span>Conclusão</span>
+              </div>
+            </div>
+          )}
+
           {(loadingUsername || usernameResults.length > 0) && (
             <div className="space-y-12">
               <div className="bg-white rounded-[2.5rem] p-2 shadow-2xl">
@@ -355,7 +394,9 @@ function AppContent() {
                       Monitorar este Username
                     </Button>
                   </div>
-                  <VisualGraph centralNode={currentUsername} platforms={usernameResults} />
+                  {usernameResults.some(r => r.status === 'found') && (
+                    <VisualGraph centralNode={currentUsername} platforms={usernameResults} />
+                  )}
                 </>
               )}
             </div>
@@ -366,7 +407,7 @@ function AppContent() {
               <div className="bg-white rounded-[2.5rem] p-2 shadow-2xl">
                 <ResultsDisplay title={currentEmail} results={emailResults} loading={loadingEmail} />
               </div>
-              {!loadingEmail && emailResults.length > 0 && (
+              {!loadingEmail && emailResults.some(r => r.status === 'found') && (
                 <VisualGraph centralNode={currentEmail} platforms={emailResults} />
               )}
             </div>

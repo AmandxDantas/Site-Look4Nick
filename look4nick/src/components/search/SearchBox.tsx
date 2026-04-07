@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, User, Mail } from 'lucide-react';
+import { Search, User, Mail, Loader2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -7,17 +7,18 @@ interface SearchBoxProps {
   type: 'username' | 'email';
   placeholder: string;
   onSearch: (value: string) => void;
+  loading?: boolean;
 }
 
 /**
  * SearchBox - Componente de Busca Horizontal e Retangular (Dark Mode).
  */
-export default function SearchBox({ type, placeholder, onSearch }: SearchBoxProps) {
+export default function SearchBox({ type, placeholder, onSearch, loading }: SearchBoxProps) {
   const [value, setValue] = useState('');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (value.trim()) {
+    if (value.trim() && !loading) {
       onSearch(value);
     }
   };
@@ -38,16 +39,22 @@ export default function SearchBox({ type, placeholder, onSearch }: SearchBoxProp
           placeholder={placeholder}
           value={value}
           onChange={(e) => setValue(e.target.value)}
+          disabled={loading}
           className="pl-12 pr-4 h-16 bg-[#121212] border border-[#311432] rounded-md shadow-sm text-[#C0C0C0] placeholder:text-[#C0C0C0]/30 text-lg focus-visible:ring-2 focus-visible:ring-[#602080]/50"
         />
       </div>
       
       <Button 
         type="submit"
-        className="h-16 bg-[#602080] hover:bg-[#7a29a3] text-white rounded-md px-8 text-lg font-bold shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3 whitespace-nowrap"
+        disabled={loading}
+        className="h-16 bg-[#602080] hover:bg-[#7a29a3] text-white rounded-md px-8 text-lg font-bold shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-3 whitespace-nowrap min-w-[200px]"
       >
-        <Search size={22} />
-        <span>{buttonLabel}</span>
+        {loading ? (
+          <Loader2 size={22} className="animate-spin" />
+        ) : (
+          <Search size={22} />
+        )}
+        <span>{loading ? 'Buscando...' : buttonLabel}</span>
       </Button>
     </form>
   );
