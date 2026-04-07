@@ -1,0 +1,74 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "The unique user ID" },
+        "displayName": { "type": "string", "description": "The user's display name" },
+        "email": { "type": "string", "description": "The user's email address" },
+        "photoURL": { "type": "string", "description": "The user's profile photo URL" },
+        "role": { "type": "string", "enum": ["admin", "user"], "description": "The user's role" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the user was created" }
+      },
+      "required": ["uid", "email"]
+    },
+    "SearchHistory": {
+      "title": "SearchHistory",
+      "description": "History of searches performed by the user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who performed the search" },
+        "query": { "type": "string", "description": "The search query (username or email)" },
+        "type": { "type": "string", "enum": ["username", "email"], "description": "The type of search" },
+        "resultsCount": { "type": "integer", "description": "Number of results found" },
+        "timestamp": { "type": "string", "format": "date-time", "description": "When the search was performed" }
+      },
+      "required": ["userId", "query", "type", "timestamp"]
+    },
+    "Watchlist": {
+      "title": "Watchlist",
+      "description": "User's monitored usernames",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who owns this watchlist item" },
+        "username": { "type": "string", "description": "The username being monitored" },
+        "platformsFound": { "type": "array", "items": { "type": "string" }, "description": "List of platforms where the username was found" },
+        "lastChecked": { "type": "string", "format": "date-time", "description": "Last time the username was checked" },
+        "status": { "type": "string", "enum": ["active", "paused"], "description": "Monitoring status" }
+      },
+      "required": ["userId", "username", "status"]
+    },
+    "FileMetadata": {
+      "title": "FileMetadata",
+      "description": "Metadata for files uploaded to Cloud Storage",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "The ID of the user who uploaded the file" },
+        "fileName": { "type": "string", "description": "The name of the file" },
+        "fileUrl": { "type": "string", "description": "The URL of the file in Cloud Storage" },
+        "uploadDate": { "type": "string", "format": "date-time", "description": "When the file was uploaded" }
+      },
+      "required": ["userId", "fileName", "fileUrl", "uploadDate"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "UserProfile",
+      "description": "Collection of user profiles"
+    },
+    "/history/{historyId}": {
+      "schema": "SearchHistory",
+      "description": "Collection of search history items"
+    },
+    "/watchlist/{watchlistId}": {
+      "schema": "Watchlist",
+      "description": "Collection of monitored usernames"
+    },
+    "/files/{fileId}": {
+      "schema": "FileMetadata",
+      "description": "Collection of file metadata"
+    }
+  }
+}
